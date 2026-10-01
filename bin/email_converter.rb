@@ -1,8 +1,8 @@
 #!/usr/bin/env ruby
 # frozen_string_literal: true
 
-require_relative 'lib/libis/format/converter/eml_converter'
-require_relative 'lib/libis/format/converter/msg_converter'
+require_relative '../lib/libis/format/converter/eml_converter'
+require_relative '../lib/libis/format/converter/msg_converter'
 
 require 'optparse'
 require 'json'
@@ -74,7 +74,7 @@ def process_file(file)
 
   if result&.fetch(:errors, []).any?
     puts "Error converting '#{file}' to #{@output_format.to_s.upcase}:" unless @quiet
-    result&.fetch(:errors, []).each { |error| puts error[:error] }
+    result&.fetch(:errors, []).each { |error| puts error[:error] } unless @quiet
     File.write(File.join(@output_dir, "#{File.basename(file, '.*')}.json"), JSON.pretty_generate(result.compact))
   else
     puts "Successfully converted '#{file}' to #{@output_format.to_s.upcase}" unless @quiet

@@ -1,0 +1,41 @@
+name: Build binaries
+
+on:
+  push:
+    tags: ['v*']      # build releases from version tags
+  workflow_dispatch:   # allow manual runs
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest   # x86-64 Windows .exe
+          - os: ubuntu-22.04     # x86-64 Linux; oldest runner = widest glibc compatibility
+          - os: macos-14         # Apple Silicon macOS
+          - os: macos-15-intel   # Intel macOS
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: '4.0.6'
+          bundler-cache: true 
+
+      - run: gem install ocran
+
+      - run: ocran bin/email_converter.rb --output email_converter-${{ matrix.os }}
+        
+      - name: Upload Release Binaries
+        uses: softprops/action-gh-release@v3
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          files: email_converter*
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: email_converter-${{ matrix.os }}
+          path: email_converter-${{ matrix.os }}
