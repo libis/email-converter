@@ -1,0 +1,87 @@
+name: Build binaries
+
+on:
+  push:
+    tags: ['v*']      # build releases from version tags
+  workflow_dispatch:   # allow manual runs
+
+jobs:
+
+  native-binary:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-22.04     # x86-64 Linux; oldest runner = widest glibc compatibility
+          - os: macos-14         # Apple Silicon macOS
+          - os: macos-15-intel   # Intel macOS
+
+    runs-on: ${{ matrix.os }}
+    
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: '4.0.7'
+          bundler-cache: true 
+
+      - name: Install ocran
+        run: gem install ocran
+        
+      - name: Build email_converter binary
+        run: ocran --output email_converter-${{ matrix.os }} ./bin/email_converter.rb
+        
+      - name: Upload Release Binaries
+        uses: softprops/action-gh-release@v3
+        if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          files: email_converter-${{ matrix.os }}*
+
+      - name: Upload Artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: email_converter-${{ matrix.os }}
+          path: email_converter-${{ matrix.os }}*
+
+  windows-binary:
+    runs-on: windows-latest
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: '4.0.7'
+          bundler-cache: true 
+
+      - name: Install ocran
+        run: gem install ocran
+
+      - name: Build email_converter binary
+        # need new release of ocran to support --set-* flags
+        # run: ocran --add-all-core --output email_converter.exe ./bin/email_converter.rb \
+        #     --console \
+        #     --set-version-string CompanyName "KU Leuven - LIBIS" \
+        #     --set-version-string ProductName "eMail Converter" \
+        #     --set-version-string FileDescription "eMail Converter" \
+        #     --set-version-string LegalCopyright "© KU Leuven - LIBIS" \
+        #     --set-file-version "1.0.0.0" \
+        #     --set-product-version "1.0.0.0"
+        run: ocran --add-all-core --console --output email_converter.exe ./bin/email_converter.rb
+
+      - name: Upload Release Binaries
+        uses: softprops/action-gh-release@v3
+        if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          files: email_converter.exe
+
+      - name: Upload Artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: email_converter.exe
+          path: email_converter.exe
