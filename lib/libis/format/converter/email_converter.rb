@@ -15,6 +15,17 @@ module Libis
     module Converter
       class EmailConverter
 
+        DEFAULT_PDF_OPTIONS = {
+              page_size: 'A4',
+              orientation: 'Portrait',
+              margin_top: '10mm',
+              margin_bottom: '10mm',
+              margin_left: '10mm',
+              margin_right: '10mm',
+              dpi: 300,
+              quiet: true,
+            }
+
         @@registered_formats = {}
 
         def self.register(input_format, output_format)
@@ -53,21 +64,11 @@ module Libis
 
           if @options[:output_format] == :pdf
 
-            # PDF creation options
-            pdf_options = {
-              page_size: 'A4',
-              margin_top: '10mm',
-              margin_bottom: '10mm',
-              margin_left: '10mm',
-              margin_right: '10mm',
-              dpi: 300
-            }.merge(@options.fetch(:pdf_options, {}))
-
             # PDFKit configuration
             PDFKit.configure do |config|
-              config.default_options = pdf_options
+              config.default_options = DEFAULT_PDF_OPTIONS.merge(@options.fetch(:pdf_options, {}))
               config.wkhtmltopdf = @options[:wkhtmltopdf_path] if @options[:wkhtmltopdf_path]
-              config.root_url = @options.fetch(:wkhtmltopdf_root_url, 'http://localhost')
+              config.root_url = 'http://localhost'
               config.verbose = @options.fetch(:wkhtmltopdf_verbose, false)
             end
           end
