@@ -42,7 +42,7 @@ module Libis
           converter_class = @@registered_formats&.dig(options[:input_format].to_sym, options[:output_format].to_sym)
           raise "No converter registered for input format '#{options[:input_format]}' and output format '#{options[:output_format]}'" unless converter_class
 
-          target = File.join(options[:output_dir], "#{File.basename(source, '.*')}.#{options[:output_format]}")
+          target = File.join(options[:output_dir], "#{File.basename(source)}.#{options[:output_format]}")
           converter = converter_class.new(source, target, **options)
           converter.convert
         end
@@ -108,14 +108,13 @@ module Libis
 
           # Embed inline images
           # -------------------
-          attachments = msg.attachments
-          used_files = embed_inline_attachments(body, attachments)
+          body = embed_inline_attachments(body, msg)
 
           # Save other attachments
           # ----------------------
           attachments_dir = "#{target}.attachments"
 
-          files = save_attachments(attachments, attachments_dir, used_files)
+          files = save_attachments(msg, attachments_dir)
 
           # Add attachment section to the HTML body
           body = add_attachments_to_body(body, files, attachments_dir)
@@ -206,14 +205,11 @@ module Libis
           ''
         end
 
-        def embed_inline_attachments(body, attachments)
-          used_files = []
-
+        def embed_inline_attachments(body, msg)
           # First process plaintext cid entries
-          body.gsub!(IMG_CID_PLAIN_REGEX) do |_match|
-            data = get_inline_attachment_data(attachments, ::Regexp.last_match(1))
+          body = body.gsub(IMG_CID_PLAIN_REGEX) do |_match|
+            data = get_inline_attachment_data(msg, ::Regexp.last_match(1))
             if data
-              used_files << ::Regexp.last_match(1)
               "<img src=\"data:#{data[:mime_type]};base64,#{data[:base64]}\"/>"
             else
               '<img src=""/>'
@@ -221,33 +217,33 @@ module Libis
           end
 
           # Then process HTML img tags with CID entries
-          body.gsub!(IMG_CID_HTML_REGEX) do |_match|
-            data = get_inline_attachment_data(attachments, ::Regexp.last_match(1))
+          body = body.gsub(IMG_CID_HTML_REGEX) do |_match|
+            data = get_inline_attachment_data(msg, ::Regexp.last_match(1))
             if data
-              used_files << ::Regexp.last_match(1)
               "data:#{data[:mime_type]};base64,#{data[:base64]}"
             else
               ''
             end
           end
-
-          used_files
+          body
         end
 
-        def save_attachments(attachments, outdir, used_files)
+        def save_attachments(msg, outdir)
           files = []
+
+          attachments = get_attachments(msg)
 
           digits = ((attachments.count + 1) / 10) + 1
           i = 1
 
-          get_attachments(attachments, used_files).each do |attachment|
+          attachments.each do |attachment|
             prefix = "#{format('%0*d', digits, i)}-"
 
             info = get_attachment_info(attachment)
 
             if info[:embedded_msg]
               sub_msg = info[:embedded_msg]
-              file = File.join(outdir, "#{prefix}#{info[:filename].tr('/', '_')}.msg.#{@options[:output_format]}")
+              file = File.join(outdir, "#{prefix}#{info[:filename].tr('/', '_')}.#{@options[:output_format]}")
 
               result = convert_email(sub_msg, file, root_msg: false)
 
@@ -261,6 +257,18 @@ module Libis
               FileUtils.mkdir_p(File.dirname(file))
               File.open(file, 'wb') { |f| f.write(info[:data]) }
               files << file
+              if info[:mime_type] == 'message/rfc822'
+                # If the attachment is an email message, convert it to the specified output format
+                # We will convert it to the same output format as the parent email
+                options = @options.dup
+                options[:input_format] = :eml
+                options[:output_dir] = File.dirname(file)
+                result = self.class.convert(file, **options)
+                if (e = result[:error])
+                  raise e
+                end
+                files += result[:files]
+              end
             else
               @warnings << "Attachment #{info[:filename]} cannot be extracted"
               next
@@ -313,10 +321,6 @@ module Libis
           body
         end
 
-        def get_attachments(attachments, used_files)
-          get_file_attachments(attachments, used_files) + get_mail_attachments(attachments)
-        end
-
         def write_target_file(body, title, target)
           kit = PDFKit.new(body, title: title || 'message')
           pdf = kit.to_pdf
@@ -346,16 +350,12 @@ module Libis
           raise NotImplementedError, 'Subclasses must implement the get_headers method'
         end
 
-        def get_inline_attachment_data(_attachments, _cid)
+        def get_inline_attachment_data(_msg, _cid)
           raise NotImplementedError, 'Subclasses must implement the get_inline_attachment_data method'
         end
 
-        def get_file_attachments(_attachments, _used_files)
-          raise NotImplementedError, 'Subclasses must implement the get_file_attachments method'
-        end
-
-        def get_mail_attachments(_attachments)
-          raise NotImplementedError, 'Subclasses must implement the get_mail_attachments method'
+        def get_attachments(msg)
+          raise NotImplementedError, 'Subclasses must implement the get_attachments method'
         end
 
         def get_attachment_info(_attachment)

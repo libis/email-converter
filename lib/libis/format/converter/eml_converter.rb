@@ -91,55 +91,51 @@ module Libis
           [headers, html]
         end
 
-        def get_inline_attachment_data(attachments, cid)
-          attachments.each do |attachment|
-            next unless attachment.has_content_id?
+        def get_inline_attachment_data(msg, cid)
+          msg.attachments.each do |attachment|
+            next unless attachment.inline? && attachment.has_content_id?
             next unless attachment.cid == cid
 
             begin
               attachment.data.rewind
+              return {
+                mime_type: attachment.mime_type,
+                base64: Base64.strict_encode64(attachment.read)
+              }
             rescue NoMethodError
               # do nothing, attachment.data is not a stream
             end
-            return {
-              mime_type: attachment.mime_type,
-              base64: Base64.strict_encode64(attachment.read)
-            }
           end
           nil
         end
 
-        def get_file_attachments(attachments, _used_files)
-          attachments.select do |attachment|
-            !attachment.inline? &&
-              !attachment.has_content_id? &&
-              attachment.mime_type != 'message/rfc822'
+        def get_attachments(msg)
+          attachments = []
+          msg.parts.each do |part|
+            if part.multipart?
+              attachments.concat(get_attachments(part))
+              next
+            end
+            next unless (part.attachment? && !part.inline?) || part.mime_type == 'message/rfc822'
+            attachments << part
           end
-        end
-
-        def get_mail_attachments(attachments)
-          attachments.select do |attachment|
-            !attachment.inline? &&
-              !attachment.has_content_id? &&
-              attachment.mime_type == 'message/rfc822'
-          end
+          attachments
         end
 
         def get_attachment_info(attachment)
           if attachment.mime_type == 'message/rfc822'
-            sub_msg = Mail.new(attachment.body.to_s)
-            subject = sub_msg.subject.to_s.strip
-
+            mail = Mail.new(attachment.body.decoded)
             {
-              embedded_msg: sub_msg,
-              filename: subject
+              embedded_msg: mail,
+              filename: mail.subject
             }
 
-          elsif attachment.filename
+          elsif attachment.class == Mail::Part && attachment.mime_type != 'message/rfc822' && attachment.filename
 
             {
               data: attachment.decoded,
-              filename: attachment.filename
+              filename: attachment.filename,
+              mime_type: attachment.mime_type
             }
 
           else

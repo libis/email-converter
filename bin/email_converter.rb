@@ -98,10 +98,10 @@ def process_file(file)
   if result&.fetch(:errors, []).any?
     puts "Error converting '#{file}' to #{@options[:output_format].to_s.upcase}:" unless @options[:quiet]
     result&.fetch(:errors, []).each { |error| puts error[:error] } unless @options[:quiet]
-    File.write(File.join(options[:output_dir], "#{File.basename(file, '.*')}.json"), JSON.pretty_generate(result.compact))
+    File.write(File.join(options[:output_dir], "#{File.basename(file)}.json"), JSON.pretty_generate(result.compact))
   else
     puts "Successfully converted '#{file}' to #{@options[:output_format].to_s.upcase}" unless @options[:quiet]
-    File.write(File.join(options[:output_dir], "#{File.basename(file, '.*')}.json"), JSON.pretty_generate(result.compact))
+    File.write(File.join(options[:output_dir], "#{File.basename(file)}.json"), JSON.pretty_generate(result.compact))
   end
 end
 # rubocop:enable all
